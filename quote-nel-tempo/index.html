@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quote di ricchezza nel tempo: Italia, Francia, Germania e Spagna – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .line--main { stroke-width: 3; }
+  .end-dot { stroke: var(--bg); stroke-width: 2; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title" id="title">&nbsp;</h1>
+    <p class="r-sub">Quota della ricchezza netta delle famiglie posseduta da ciascun gruppo, in %. Le famiglie sono ordinate dalla più povera alla più ricca</p>
+  </header>
+
+  <figure class="r-chart" id="p-top"><p class="r-chart__head">10% più ricco</p></figure>
+  <figure class="r-chart" id="p-mid"><p class="r-chart__head">40% centrale</p></figure>
+  <figure class="r-chart" id="p-low"><p class="r-chart__head">50% più povero</p></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Bce, Distributional Wealth Accounts. Dati al 4° trimestre di ogni anno; 2026: 1° trimestre</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var COUNTRIES = ["Italia", "Francia", "Germania", "Spagna"];
+  var STYLE = {
+    Italia:   { c: "var(--blue)",   main: true },
+    Francia:  { c: "var(--grey-2)" },
+    Germania: { c: "var(--grey-3)" },
+    Spagna:   { c: "var(--grey-4)" }
+  };
+  var GROUPS = [
+    { id: "p-top", col: "10% più ricco" },
+    { id: "p-mid", col: "40% centrale" },
+    { id: "p-low", col: "50% più povero" }
+  ];
+  var f1 = function (v) { return fmt(v, 1) + "%"; };
+  var pt = function (v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v), 1); };
+
+  function parsePeriod(s) {            // "2025T4" -> 31/12/2025 ; "2026T1" -> 31/3/2026
+    var y = +s.slice(0, 4), q = +s.slice(5);
+    return new Date(y, q * 3, 0);
+  }
+  function lbl(d) { return d.getMonth() === 11 ? String(d.getFullYear()) : "1° trim. " + d.getFullYear(); }
+
+  R.loadCSV("../data/quote-ricchezza.csv").then(function (rows) {
+    var data = {};
+    rows.forEach(function (r) {
+      var c = r["Paese"]; (data[c] = data[c] || []).push({
+        d: parsePeriod(r["Periodo"]),
+        v: { "10% più ricco": R.num(r["10% più ricco"]), "40% centrale": R.num(r["40% centrale"]), "50% più povero": R.num(r["50% più povero"]) }
+      });
+    });
+    COUNTRIES.forEach(function (c) { data[c].sort(function (a, b) { return a.d - b.d; }); });
+
+    // titolo calcolato dai dati: variazione del 40% centrale italiano
+    var it = data.Italia, first = it[0], last = it[it.length - 1];
+    var dMid = last.v["40% centrale"] - first.v["40% centrale"];
+    var dTop = last.v["10% più ricco"] - first.v["10% più ricco"];
+    document.getElementById("title").innerHTML =
+      "<span>In Italia il 40% centrale perde " + fmt(Math.abs(dMid), 1).replace(",0", "") + " punti di ricchezza</span>" +
+      "<span>Il 10% più ricco ne guadagna " + fmt(dTop, 1).replace(",0", "") + "</span>";
+
+    var xDomain = d3.extent([].concat.apply([], COUNTRIES.map(function (c) { return data[c].map(function (p) { return p.d; }); })));
+
+    GROUPS.forEach(function (G, gi) {
+      var host = document.getElementById(G.id);
+      var tip = R.tooltip(host);
+      var cross;
+      R.dismissOutside(host, function () { tip.hide(); if (cross) cross.style("opacity", 0); });
+
+      R.responsive(host, function (W, phase) {
+        var narrow = R.isNarrow(W);
+        var m = { top: 14, right: narrow ? 84 : 196, bottom: 26, left: 34 };
+        var H = narrow ? 200 : 220;
+        var w = W - m.left - m.right, h = H - m.top - m.bottom;
+        var vals = [].concat.apply([], COUNTRIES.map(function (c) { return data[c].map(function (p) { return p.v[G.col]; }); }));
+        var lo = d3.min(vals), hi = d3.max(vals), pad = (hi - lo) * 0.12 || 1;
+        var y = d3.scaleLinear().domain([Math.max(0, lo - pad), hi + pad]).nice(4).range([h, 0]);
+        var x = d3.scaleTime().domain(xDomain).range([0, w]);
+        var ticks = y.ticks(4);
+
+        d3.select(host).select("svg").remove();
+        var itF = data.Italia[0], itL = data.Italia[data.Italia.length - 1];
+        var svg = d3.select(host).insert("svg", ".r-tip").attr("width", W).attr("height", H).attr("role", "img")
+          .attr("aria-label", "Quota di ricchezza del " + G.col + ": in Italia passa dal " + f1(itF.v[G.col]) + " del " + itF.d.getFullYear() +
+            " al " + f1(itL.v[G.col]) + " del " + itL.d.getFullYear() + "; " +
+            COUNTRIES.slice(1).map(function (c) { var s = data[c]; return c + " " + f1(s[s.length - 1].v[G.col]); }).join(", ") + ".");
+        svg.append("title").text("Quota di ricchezza del " + G.col + " nel tempo");
+        var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+
+        g.append("g").attr("class", "grid").selectAll("line").data(ticks).join("line")
+          .attr("x1", -m.left).attr("x2", w)
+          .attr("y1", function (d) { return Math.round(y(d)) + 0.5; }).attr("y2", function (d) { return Math.round(y(d)) + 0.5; });
+        g.append("g").selectAll("text").data(ticks).join("text").attr("class", "tick-label")
+          .attr("x", -m.left).attr("y", function (d) { return y(d) - 4; }).text(function (d) { return fmt(d, 0) + "%"; });
+
+        var years = [2012, 2016, 2020, 2024].map(function (yy) { return new Date(yy, 11, 31); });
+        g.append("g").selectAll("text").data(years).join("text").attr("class", "tick-label").attr("text-anchor", "middle")
+          .attr("x", function (d) { return x(d); }).attr("y", h + 18)
+          .text(function (d) { return narrow ? "’" + String(d.getFullYear()).slice(2) : d.getFullYear(); });
+
+        var line = d3.line().x(function (p) { return x(p.d); }).y(function (p) { return y(p.v[G.col]); }).curve(d3.curveMonotoneX);
+        var order = COUNTRIES.slice().reverse(); // Italia disegnata per ultima, sopra le altre
+        var paths = g.append("g").selectAll("path").data(order).join("path")
+          .attr("class", function (c) { return "line mark" + (STYLE[c].main ? " line--main" : ""); })
+          .style("stroke", function (c) { return STYLE[c].c; })
+          .attr("d", function (c) { return line(data[c]); });
+        paths.each(function () { var L = this.getTotalLength(); d3.select(this).attr("data-len", L); });
+        R.enter(paths, phase,
+          function (p) { p.attr("stroke-dasharray", function () { var L = this.getAttribute("data-len"); return L + " " + L; })
+                          .attr("stroke-dashoffset", function () { return this.getAttribute("data-len"); }); },
+          function (p) { p.attr("stroke-dashoffset", 0).on("end", function () { d3.select(this).attr("stroke-dasharray", null); }); });
+        if (phase === "static") paths.attr("stroke-dasharray", null).attr("stroke-dashoffset", null);
+
+        // pallini e etichette dirette a fine linea, senza sovrapposizioni
+        var ends = COUNTRIES.map(function (c) { var s = data[c], p = s[s.length - 1]; return { c: c, p: p, y: y(p.v[G.col]) }; });
+        var lab = ends.slice().sort(function (a, b) { return a.y - b.y; });
+        for (var k = 1; k < lab.length; k++) if (lab[k].y - lab[k - 1].y < 15) lab[k].y = lab[k - 1].y + 15;
+        var over = lab[lab.length - 1].y - h + 4; if (over > 0) lab.forEach(function (l) { l.y -= over; });
+        var endG = g.append("g");
+        endG.selectAll("circle").data(ends).join("circle").attr("class", "end-dot mark")
+          .attr("cx", function (e) { return x(e.p.d); }).attr("cy", function (e) { return y(e.p.v[G.col]); })
+          .attr("r", function (e) { return STYLE[e.c].main ? 4.5 : 3.5; }).style("fill", function (e) { return STYLE[e.c].c; });
+        var texts = endG.selectAll("text").data(lab).join("text")
+          .attr("class", function (e) { return STYLE[e.c].main ? "series-label" : "series-label series-label--sub"; })
+          .attr("x", w + 9).attr("y", function (e) { return e.y + 4; });
+        texts.append("tspan").text(function (e) { return e.c + " "; });
+        texts.append("tspan").style("font-weight", 700).style("fill", "var(--ink)").text(function (e) { return f1(e.p.v[G.col]); });
+        var d0 = itL.v[G.col] - itF.v[G.col];
+        if (!narrow) texts.filter(function (e) { return e.c === "Italia"; }).append("tspan").attr("class", "series-label--sub")
+          .style("font-weight", 400).text(" " + pt(d0) + " pt dal " + itF.d.getFullYear());
+        R.enter(endG, phase, function (e) { e.style("opacity", 0); }, function (e) { e.style("opacity", 1); }, R.DUR * 0.7);
+
+        // crosshair e tooltip
+        cross = g.append("line").attr("class", "crosshair").attr("y1", 0).attr("y2", h).style("opacity", 0);
+        var dates = data.Italia.map(function (p) { return p.d; });
+        g.append("rect").attr("class", "hit").attr("width", w).attr("height", h)
+          .on("pointermove pointerdown", function (ev) {
+            var mx = d3.pointer(ev, this)[0], t = x.invert(mx);
+            var d = dates.reduce(function (a, b) { return Math.abs(b - t) < Math.abs(a - t) ? b : a; });
+            cross.attr("x1", x(d)).attr("x2", x(d)).style("opacity", 1);
+            var rowsT = COUNTRIES.map(function (c) {
+              var p = data[c].find(function (q) { return +q.d === +d; });
+              return [c, p ? f1(p.v[G.col]) : "–"];
+            });
+            var hp = d3.pointer(ev, host);
+            tip.show(R.tipHTML({ title: G.col + " · " + lbl(d), rows: rowsT }), hp[0], hp[1]);
+          })
+          .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); cross.style("opacity", 0); } });
+      });
+    });
+  }).catch(function (err) { R.fail(document.querySelector(".radar"), err); });
+})();
+</script>
+</body>
+</html>

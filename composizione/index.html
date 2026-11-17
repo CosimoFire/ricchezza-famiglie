@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Di cosa è fatta la ricchezza delle famiglie italiane – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .r-pick { display: block; width: 100%; max-width: 320px; font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--rule); border-radius: 2px; padding: 7px 34px 7px 10px; margin: 0 0 8px; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%), linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
+  .r-pick:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .seg-name { font-size: 12px; font-weight: 600; }
+  .seg-val { font-size: 15px; font-weight: 700; }
+  .ext-label { font-size: 12px; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .ext-label tspan.v { font-weight: 700; }
+  .leader { stroke: var(--ink); stroke-width: 0.75; fill: none; }
+  .bar-block + .bar-block { margin-top: 26px; }
+  .r-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Di cosa è fatta la ricchezza delle famiglie italiane</h1>
+  </header>
+
+  <figure class="r-chart" id="chart">
+    <div class="bar-block" id="b0">
+      <label class="r-sr" for="s0">Primo gruppo di famiglie</label>
+      <select class="r-pick" id="s0"></select>
+      <div class="bar-host"></div>
+    </div>
+    <div class="bar-block" id="b1">
+      <label class="r-sr" for="s1">Secondo gruppo di famiglie</label>
+      <select class="r-pick" id="s1"></select>
+      <div class="bar-host"></div>
+    </div>
+  </figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Banca d'Italia, Conti distributivi della ricchezza, 1° trimestre 2026</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  // ordine fisso delle voci, uguale nelle due barre; il rosso evidenzia le imprese non quotate
+  var CAT = [
+    { k: "Casa", fill: "var(--blue)", txt: "var(--on-dark)" },
+    { k: "Imprese non quotate", fill: "var(--red)", txt: "var(--on-dark)" },
+    { k: "Depositi", fill: "var(--grey-2)", txt: "var(--on-dark)" },
+    { k: "Azioni e fondi", fill: "var(--grey-3)", txt: "var(--on-dark)" },
+    { k: "Assicurazioni vita", fill: "var(--grey-4)", txt: "var(--on-light)" },
+    { k: "Obbligazioni", fill: "var(--grey-5)", txt: "var(--on-light)" }
+  ];
+  var DEF = ["50% più povero", "10% più ricco"];
+  var chart = document.getElementById("chart");
+  var tip = R.tooltip(chart);
+  var hovered = null;
+  function clearHover() { hovered = null; d3.selectAll("#chart .seg").classed("is-dimmed", false); tip.hide(); }
+  R.dismissOutside(chart, clearHover);
+
+  R.loadCSV("../data/composizione-ricchezza.csv").then(function (rows) {
+    var G = rows.map(function (r) {
+      var att = R.num(r["Totale attività"]);
+      return { name: r["Gruppo"], att: att, parts: CAT.map(function (c) { var v = R.num(r[c.k]); return { k: c.k, v: v, s: v / att, c: c }; }) };
+    });
+    var byName = {}; G.forEach(function (g) { byName[g.name] = g; });
+    var sel = [document.getElementById("s0"), document.getElementById("s1")];
+    sel.forEach(function (s, i) {
+      s.innerHTML = G.map(function (g) { return '<option>' + g.name + '</option>'; }).join("");
+      s.value = byName[DEF[i]] ? DEF[i] : G[0].name;
+    });
+
+    var eur = function (k) { return k >= 1000 ? fmt(k / 1000, 2) + " mln €" : fmt(k, 0) + " mila €"; };
+    var phases = ["pre", "pre"], widths = [0, 0];
+
+    function drawBar(i, W, phase) {
+      var g = byName[sel[i].value];
+      var host = d3.select("#b" + i + " .bar-host");
+      var narrow = R.isNarrow(W);
+      var BH = narrow ? 56 : 68, GAP = 2;
+      var x = d3.scaleLinear().domain([0, 1]).range([0, W]);
+      // posizioni cumulate, 2px di spazio tra i segmenti
+      var acc = 0, n = g.parts.length;
+      var segs = g.parts.map(function (p, j) {
+        var x0 = x(acc); acc += p.s; var x1 = x(acc);
+        return Object.assign({}, p, { x0: x0, w: Math.max(0, x1 - x0 - (j < n - 1 ? GAP : 0)), last: j === n - 1, mid: (x0 + x1) / 2 });
+      });
+
+      host.select("svg").remove();
+      var svg = host.append("svg").attr("width", W).attr("role", "img")
+        .attr("aria-label", "Composizione delle attività, " + g.name + ": " + segs.map(function (s) { return s.k + " " + R.pct(s.s, 1); }).join(", "));
+      svg.append("title").text("Di cosa è fatta la ricchezza: " + g.name);
+
+      var gb = svg.append("g");
+      var paths = gb.selectAll("path").data(segs).join("path").attr("class", "seg mark")
+        .style("fill", function (s) { return s.c.fill; });
+      function pathAt(s, t) {
+        // crescita da sinistra: ogni segmento si allunga in proporzione
+        var x0 = s.x0 * t, w = s.w * t;
+        return s.last ? R.barPathH(x0, 0, w, BH, 2) : "M" + x0 + ",0h" + w + "v" + BH + "h" + (-w) + "Z";
+      }
+      R.enter(paths, phase,
+        function (p) { p.attr("d", function (s) { return pathAt(s, 0); }); },
+        function (p) { p.attrTween("d", function (s) { return function (t) { return pathAt(s, t); }; }); });
+
+      // etichette dentro i segmenti quando ci stanno, altrimenti sotto con una linea di richiamo
+      var inside = gb.append("g").attr("pointer-events", "none");
+      var outside = [];
+      segs.forEach(function (s) {
+        var t = inside.append("text").attr("x", s.x0 + 8).attr("y", BH / 2 - 4).style("fill", s.c.txt);
+        t.append("tspan").attr("class", "seg-name").attr("x", s.x0 + 8).text(s.k);
+        t.append("tspan").attr("class", "seg-val").attr("x", s.x0 + 8).attr("dy", 18).text(R.pct(s.s, 1));
+        var wName = t.select(".seg-name").node().getComputedTextLength();
+        var wVal = t.select(".seg-val").node().getComputedTextLength();
+        if (Math.max(wName, wVal) + 14 <= s.w) return;            // nome e valore dentro il segmento
+        t.remove(); outside.push(s);                               // altrimenti etichetta esterna con richiamo
+      });
+      R.enter(inside, phase, function (e) { e.style("opacity", 0); }, function (e) { e.style("opacity", 1); }, R.DUR * 0.6);
+      // etichette esterne: una riga ciascuna sotto la barra, linee che non si incrociano
+      var ext = gb.append("g").attr("class", "ext");
+      var right = outside.filter(function (s) { return s.mid >= W / 2; }).sort(function (a, b) { return a.mid - b.mid; });
+      var left = outside.filter(function (s) { return s.mid < W / 2; }).sort(function (a, b) { return b.mid - a.mid; });
+      var LH = 17, y0 = BH + 16;
+      // ogni etichetta ha una riga propria: prima quelle a sinistra, poi quelle a destra
+      [right, left].forEach(function (list, side) {
+        list.forEach(function (s, j) {
+          var ly = y0 + (side === 0 ? left.length + j : j) * LH;
+          ext.append("path").attr("class", "leader").attr("d", "M" + s.mid + "," + (BH + 3) + "V" + (ly - 4));
+          ext.append("circle").attr("cx", s.mid).attr("cy", BH + 3).attr("r", 1.6).style("fill", "var(--ink)");
+          var t = ext.append("text").attr("class", "ext-label").attr("y", ly + 4)
+            .attr("x", side === 0 ? s.mid - 5 : s.mid + 5).attr("text-anchor", side === 0 ? "end" : "start");
+          t.append("tspan").text(s.k + " ");
+          t.append("tspan").attr("class", "v").text(R.pct(s.s, 1));
+        });
+      });
+      var rowsOut = right.length + left.length;
+      if (phase !== "static") R.enter(ext, phase, function (e) { e.style("opacity", 0); }, function (e) { e.style("opacity", 1); }, R.DUR * 0.8);
+      var H = BH + (rowsOut ? 16 + rowsOut * LH : 0) + 4;
+      svg.attr("height", H);
+
+      // interazione: evidenzia la voce in entrambe le barre
+      paths.on("pointerenter pointermove pointerdown", function (ev, s) {
+        hovered = s.k;
+        d3.selectAll("#chart .seg").classed("is-dimmed", function (q) { return q.k !== hovered; });
+        var other = byName[sel[1 - i].value].parts.find(function (q) { return q.k === s.k; });
+        var p = d3.pointer(ev, chart);
+        tip.show(R.tipHTML({ title: s.k + " · " + g.name, value: R.pct(s.s, 1), unit: "delle attività",
+          rows: [["In media a famiglia", eur(s.v)], [sel[1 - i].value, R.pct(other.s, 1)]] }), p[0], p[1]);
+      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") clearHover(); });
+    }
+
+    function renderAll(phase) {
+      var W = Math.floor(chart.getBoundingClientRect().width);
+      [0, 1].forEach(function (i) { drawBar(i, W, phase); });
+      R.scheduleHeight();
+    }
+    R.responsive(chart, function (W, phase) { [0, 1].forEach(function (i) { drawBar(i, W, phase); }); });
+    sel.forEach(function (s, i) {
+      s.addEventListener("change", function () {
+        if (sel[0].value === sel[1].value) { var alt = G.find(function (g) { return g.name !== s.value; }); sel[1 - i].value = alt.name; }
+        clearHover(); renderAll("play");
+      });
+    });
+  }).catch(function (err) { R.fail(chart, err); });
+})();
+</script>
+</body>
+</html>
