@@ -16,7 +16,7 @@
   .cls-label { font-size: 13px; font-weight: 600; fill: var(--ink); }
   .seg-val { font-size: 16px; font-weight: 700; }
   .out-val { font-size: 14px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
-  .link { opacity: 0.22; }
+  .link { opacity: 1; }
   .halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
   .thr text { font-size: 12px; fill: var(--ink-2); }
   .thr text.halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
@@ -120,7 +120,8 @@
         .style("fill", function (d) { return d.c; })
         .attr("d", function (d) {
           var a = sP[d.i], b = sW[d.i];
-          return "M" + a.x0 + "," + (yTop + BH) + "H" + (a.x0 + a.w) + "L" + (b.x0 + b.w) + "," + yBot + "H" + b.x0 + "Z";
+          var g2 = 3; // piccolo stacco tra barre e collegamento, così le barre restano leggibili
+          return "M" + a.x0 + "," + (yTop + BH + g2) + "H" + (a.x0 + a.w) + "L" + (b.x0 + b.w) + "," + (yBot - g2) + "H" + b.x0 + "Z";
         });
       R.enter(links, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", null); }, R.DUR * 0.7);
 
