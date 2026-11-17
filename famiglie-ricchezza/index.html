@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quante famiglie, quanta ricchezza – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .row-label { font-size: 13px; font-weight: 600; fill: var(--ink); }
+  .row-label--sub { font-size: 12px; font-weight: 400; fill: var(--ink-2); }
+  .cls-label { font-size: 13px; font-weight: 600; fill: var(--ink); }
+  .seg-val { font-size: 16px; font-weight: 700; }
+  .out-val { font-size: 14px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .link { opacity: 0.22; }
+  .halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .thr text { font-size: 12px; fill: var(--ink-2); }
+  .thr text .v { font-size: 14px; font-weight: 700; fill: var(--ink); }
+  .thr line { stroke: var(--ink); stroke-width: 0.75; }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title" id="title">&nbsp;</h1>
+    <p class="r-sub">Famiglie italiane ordinate per ricchezza netta (beni meno debiti): quota delle famiglie in ciascun gruppo e quota della ricchezza che possiedono. 1° trimestre 2026</p>
+  </header>
+
+  <figure class="r-chart" id="chart"></figure>
+
+  <footer class="r-foot">
+    <span>Fonte: Banca d'Italia</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar, fmt = R.fmt;
+  var COL = ["var(--blue-4)", "var(--blue-3)", "var(--blue-1)"];   // dal più povero al più ricco: il 10% più ricco è il più in evidenza
+  var chart = document.getElementById("chart");
+  var tip = R.tooltip(chart);
+  R.dismissOutside(chart, function () { tip.hide(); d3.selectAll("#chart .cls").classed("is-dimmed", false); });
+
+  // colore del testo sopra un segmento: chiaro o scuro secondo il colore reale nel tema in uso
+  var probe = document.createElement("span"); probe.style.display = "none"; document.body.appendChild(probe);
+  function rgb(c) { probe.style.color = c; return getComputedStyle(probe).color.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number); }
+  function lum(m) { function ch(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); } return 0.2126 * ch(m[0]) + 0.7152 * ch(m[1]) + 0.0722 * ch(m[2]); }
+  function contrast(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function textOn(fill) { var f = rgb(fill); return contrast(f, [255, 255, 255]) >= contrast(f, [18, 18, 18]) ? "#ffffff" : "#121212"; }
+  var eur = function (k) { return k >= 1000 ? fmt(k / 1000, 2) + " mln €" : fmt(k, 0) + " mila €"; };
+
+  R.loadCSV("../data/famiglie-ricchezza.csv").then(function (rows) {
+    var D = rows.map(function (r, i) {
+      return { k: r["Classe"], pop: R.num(r["Quota delle famiglie"]), wea: R.num(r["Quota della ricchezza"]),
+               thr: R.num(r["Soglia di ingresso (migliaia di euro)"]), mean: R.num(r["Ricchezza netta media per famiglia (migliaia di euro)"]), c: COL[i], i: i };
+    });
+    var top = D[D.length - 1];
+    document.getElementById("title").textContent =
+      "Il " + fmt(top.pop, 0) + "% delle famiglie possiede il " + fmt(Math.round(top.wea), 0) + "% della ricchezza";
+
+    function draw(W, phase) {
+      var narrow = R.isNarrow(W);
+      var lw = narrow ? 0 : 112;                  // colonna delle etichette di riga (solo desktop)
+      var w = W - lw, BH = narrow ? 50 : 58, GAP = 2;
+      var yTop = narrow ? 66 : 46, LINK = narrow ? 70 : 84, yBot = yTop + BH + LINK;
+      var x = d3.scaleLinear().domain([0, 100]).range([0, w]);
+      function segs(key) {
+        var acc = 0;
+        return D.map(function (d, j) { var x0 = x(acc); acc += d[key]; var x1 = x(acc); return { d: d, x0: x0, x1: x1, w: Math.max(0, x1 - x0 - (j < D.length - 1 ? GAP : 0)) }; });
+      }
+      var sP = segs("pop"), sW = segs("wea");
+
+      d3.select(chart).select("svg").remove();
+      var svg = d3.select(chart).insert("svg", ".r-tip").attr("width", W).attr("role", "img")
+        .attr("aria-label", D.map(function (d) { return "il " + d.k + " delle famiglie possiede il " + fmt(d.wea, 1) + "% della ricchezza"; }).join("; ") +
+          ". Per entrare nel 40% centrale servono " + eur(D[1].thr) + " di ricchezza netta, per il 10% più ricco " + eur(D[2].thr) + ".");
+      svg.append("title").text("Quota delle famiglie e quota della ricchezza per gruppo");
+      var g = svg.append("g").attr("transform", "translate(" + lw + ",0)");
+
+      // etichette di riga
+      if (!narrow) {
+        svg.append("text").attr("class", "row-label").attr("x", 0).attr("y", yTop + BH / 2 - 2).text("Famiglie");
+        svg.append("text").attr("class", "row-label--sub").attr("x", 0).attr("y", yTop + BH / 2 + 14).text("quota sul totale");
+        svg.append("text").attr("class", "row-label").attr("x", 0).attr("y", yBot + BH / 2 - 2).text("Ricchezza");
+        svg.append("text").attr("class", "row-label--sub").attr("x", 0).attr("y", yBot + BH / 2 + 14).text("quota posseduta");
+      } else {
+        g.append("text").attr("class", "row-label--sub").attr("x", 0).attr("y", yTop - 46).text("Quota delle famiglie");
+        g.append("text").attr("class", "row-label--sub halo").attr("x", w).attr("text-anchor", "end").attr("y", yBot - 8).text("Quota della ricchezza");
+      }
+
+      // nomi dei gruppi sopra la barra delle famiglie
+      g.selectAll(".cls-label").data(sP).join("text").attr("class", "cls-label")
+        .attr("y", yTop - 8)
+        .attr("x", function (s, j) { return j === 0 ? s.x0 : j === D.length - 1 ? s.x0 + s.w : s.x0 + s.w / 2; })
+        .attr("text-anchor", function (s, j) { return j === 0 ? "start" : j === D.length - 1 ? "end" : "middle"; })
+        .text(function (s) { return s.d.k; });
+      // se due nomi si sovrappongono, il secondo sale di una riga con un trattino di richiamo
+      var boxes = [];
+      g.selectAll(".cls-label").each(function (s) {
+        var b = this.getBBox(), row = 0;
+        while (boxes.some(function (p) { return p.row === row && b.x < p.x1 + 8 && b.x + b.width > p.x0 - 8; })) row++;
+        boxes.push({ row: row, x0: b.x, x1: b.x + b.width });
+        if (row) {
+          d3.select(this).attr("y", yTop - 8 - row * 18);
+          var cx = s.x0 + s.w / 2;
+          g.append("line").attr("x1", cx).attr("x2", cx).attr("y1", yTop - 2 - row * 18 + 4).attr("y2", yTop - 2).style("stroke", "var(--ink)").style("stroke-width", 0.75);
+        }
+      });
+
+      var groups = g.selectAll(".cls").data(D).join("g").attr("class", "cls mark");
+
+      // collegamenti tra le due barre
+      var links = groups.append("path").attr("class", "link")
+        .style("fill", function (d) { return d.c; })
+        .attr("d", function (d) {
+          var a = sP[d.i], b = sW[d.i];
+          return "M" + a.x0 + "," + (yTop + BH) + "H" + (a.x0 + a.w) + "L" + (b.x0 + b.w) + "," + yBot + "H" + b.x0 + "Z";
+        });
+      R.enter(links, phase, function (s) { s.style("opacity", 0); }, function (s) { s.style("opacity", null); }, R.DUR * 0.7);
+
+      // barre
+      function bar(list, y0, key) {
+        var p = groups.append("path").attr("class", "seg").style("fill", function (d) { return d.c; });
+        function shape(d, t) {
+          var s = list[d.i], x0 = s.x0 * t, ww = s.w * t;
+          return d.i === D.length - 1 ? R.barPathH(x0, y0, ww, BH, 2) : "M" + x0 + "," + y0 + "h" + ww + "v" + BH + "h" + (-ww) + "Z";
+        }
+        R.enter(p, phase, function (q) { q.attr("d", function (d) { return shape(d, 0); }); },
+          function (q) { if (q.attrTween) q.attrTween("d", function (d) { return function (t) { return shape(d, t); }; }); else q.attr("d", function (d) { return shape(d, 1); }); });
+        // valori: dentro il segmento se ci stanno, altrimenti appena sopra
+        groups.each(function (d) {
+          var s = list[d.i], label = fmt(d[key], key === "pop" ? 0 : 1) + "%";
+          var t = d3.select(this).append("text").attr("class", "seg-val").attr("x", s.x0 + 8).attr("y", y0 + BH / 2 + 6)
+            .style("fill", textOn(d.c)).text(label);
+          if (t.node().getComputedTextLength() + 14 > s.w) {
+            t.attr("class", "out-val").style("fill", null).attr("x", s.x0).attr("y", y0 - 7);
+          }
+          R.enter(t, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, R.DUR * 0.6);
+        });
+      }
+      bar(sP, yTop, "pop");
+      bar(sW, yBot, "wea");
+
+      // soglie di ingresso sotto la barra della ricchezza, all'inizio di ogni gruppo
+      var thr = g.append("g").attr("class", "thr");
+      var yT = yBot + BH, placed = [];
+      D.forEach(function (d) {
+        if (d.thr == null) return;
+        var s = sW[d.i], xx = s.x0, row = 0;
+        var t = thr.append("text").attr("x", xx + 5);
+        t.append("tspan").attr("class", "v").attr("x", xx + 5).text(eur(d.thr));
+        t.append("tspan").attr("x", xx + 5).attr("dy", 16).text("per entrare nel " + d.k);
+        var wid = t.node().getBBox().width;
+        while (placed.some(function (p) { return p.row === row && xx < p.x1 + 10 && xx + wid > p.x0 - 10; })) row++;
+        placed.push({ row: row, x0: xx, x1: xx + wid + 5 });
+        var ty = yT + 22 + row * 40;
+        t.attr("y", ty).selectAll("tspan").attr("y", ty);
+        t.select("tspan:nth-child(2)").attr("dy", 16);
+        thr.insert("line", "text").attr("x1", xx).attr("x2", xx).attr("y1", yBot - 4).attr("y2", ty + 20);
+      });
+      R.enter(thr, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, R.DUR);
+      var maxRow = placed.reduce(function (m, p) { return Math.max(m, p.row); }, 0);
+      var H = yT + 22 + maxRow * 40 + 26;
+      svg.attr("height", H);
+
+      // interazione: un gruppo si evidenzia nelle due barre e nel collegamento
+      groups.on("pointerenter pointermove pointerdown", function (ev, d) {
+        d3.selectAll("#chart .cls").classed("is-dimmed", function (q) { return q !== d; });
+        var p = d3.pointer(ev, chart);
+        var rowsT = [["Quota delle famiglie", fmt(d.pop, 0) + "%"], ["Quota della ricchezza", fmt(d.wea, 1) + "%"],
+                     ["Ricchezza media per famiglia", eur(d.mean)]];
+        if (d.thr != null) rowsT.push(["Soglia di ingresso", eur(d.thr)]); else rowsT.push(["Ricchezza fino a", eur(D[1].thr)]);
+        tip.show(R.tipHTML({ title: d.k, rows: rowsT }), p[0], p[1]);
+      }).on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); d3.selectAll("#chart .cls").classed("is-dimmed", false); } });
+    }
+
+    var lastPhase = "pre";
+    R.responsive(chart, function (W, phase) { lastPhase = phase; draw(W, phase); });
+    new MutationObserver(function () { draw(Math.floor(chart.getBoundingClientRect().width), "static"); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }).catch(function (err) { R.fail(chart, err); });
+})();
+</script>
+</body>
+</html>
