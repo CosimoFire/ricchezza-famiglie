@@ -26,7 +26,7 @@
 <body>
 <main class="radar">
   <header>
-    <h1 class="r-title" id="title">&nbsp;</h1>
+    <h1 class="r-title" id="title">L’andamento</h1>
     <p class="r-sub">Quota della ricchezza netta delle famiglie posseduta da ciascun gruppo, in %. Le famiglie sono ordinate dalla più povera alla più ricca</p>
   </header>
 
@@ -77,14 +77,6 @@
       });
     });
     COUNTRIES.forEach(function (c) { data[c].sort(function (a, b) { return a.d - b.d; }); });
-
-    // titolo calcolato dai dati: variazione del 40% centrale italiano
-    var it = data.Italia, first = it[0], last = it[it.length - 1];
-    var dMid = last.v["40% centrale"] - first.v["40% centrale"];
-    var dTop = last.v["10% più ricco"] - first.v["10% più ricco"];
-    document.getElementById("title").innerHTML =
-      "<span>In Italia il 40% centrale perde " + fmt(Math.abs(dMid), 1).replace(",0", "") + " punti di ricchezza</span>" +
-      "<span>Il 10% più ricco ne guadagna " + fmt(dTop, 1).replace(",0", "") + "</span>";
 
     var xDomain = d3.extent([].concat.apply([], COUNTRIES.map(function (c) { return data[c].map(function (p) { return p.d; }); })));
 
