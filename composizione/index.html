@@ -64,6 +64,12 @@
     { k: "Obbligazioni", fill: "var(--grey-5)", txt: "var(--on-light)" }
   ];
   var DEF = ["50% più povero", "10% più ricco"];
+  // testo sopra un segmento: scuro o chiaro a seconda del colore reale del segmento nel tema in uso
+  var probe = document.createElement("span"); probe.style.display = "none"; document.body.appendChild(probe);
+  function rgb(c) { probe.style.color = c; return getComputedStyle(probe).color.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number); }
+  function lum(m) { return 0.2126 * ch(m[0]) + 0.7152 * ch(m[1]) + 0.0722 * ch(m[2]); function ch(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); } }
+  function contrast(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function textOn(fill) { var f = rgb(fill); return contrast(f, [255, 255, 255]) >= contrast(f, [18, 18, 18]) ? "#ffffff" : "#121212"; }
   var chart = document.getElementById("chart");
   var tip = R.tooltip(chart);
   var hovered = null;
@@ -119,7 +125,7 @@
       var inside = gb.append("g").attr("pointer-events", "none");
       var outside = [];
       segs.forEach(function (s) {
-        var t = inside.append("text").attr("x", s.x0 + 8).attr("y", BH / 2 - 4).style("fill", s.c.txt);
+        var t = inside.append("text").attr("x", s.x0 + 8).attr("y", BH / 2 - 4).style("fill", textOn(s.c.fill));
         t.append("tspan").attr("class", "seg-name").attr("x", s.x0 + 8).text(s.k);
         t.append("tspan").attr("class", "seg-val").attr("x", s.x0 + 8).attr("dy", 18).text(R.pct(s.s, 1));
         var wName = t.select(".seg-name").node().getComputedTextLength();
@@ -166,6 +172,7 @@
       [0, 1].forEach(function (i) { drawBar(i, W, phase); });
       R.scheduleHeight();
     }
+    new MutationObserver(function () { renderAll("static"); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     R.responsive(chart, function (W, phase) { [0, 1].forEach(function (i) { drawBar(i, W, phase); }); });
     sel.forEach(function (s, i) {
       s.addEventListener("change", function () {
