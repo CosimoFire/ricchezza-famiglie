@@ -19,6 +19,7 @@
   .link { opacity: 0.22; }
   .halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
   .thr text { font-size: 12px; fill: var(--ink-2); }
+  .thr text.halo { paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
   .thr text .v { font-size: 14px; font-weight: 700; fill: var(--ink); }
   .thr line { stroke: var(--ink); stroke-width: 0.75; }
 </style>
@@ -138,6 +139,8 @@
           var t = d3.select(this).append("text").attr("class", "seg-val").attr("x", s.x0 + 8).attr("y", y0 + BH / 2 + 6)
             .style("fill", textOn(d.c)).text(label);
           if (t.node().getComputedTextLength() + 14 > s.w) {
+            // nella barra delle famiglie la quota è già nel nome del gruppo ("10% più ricco"): se non ci sta, la tolgo
+            if (key === "pop") { t.remove(); return; }
             t.attr("class", "out-val").style("fill", null).attr("x", s.x0).attr("y", y0 - 7);
           }
           R.enter(t, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, R.DUR * 0.6);
@@ -146,26 +149,39 @@
       bar(sP, yTop, "pop");
       bar(sW, yBot, "wea");
 
-      // soglie di ingresso sotto la barra della ricchezza, all'inizio di ogni gruppo
+      // soglie di ingresso sotto la barra della ricchezza, all'inizio di ogni gruppo.
+      // Il testo va a capo per restare prima della soglia successiva, così le linee non lo attraversano.
       var thr = g.append("g").attr("class", "thr");
-      var yT = yBot + BH, placed = [];
-      D.forEach(function (d) {
-        if (d.thr == null) return;
-        var s = sW[d.i], xx = s.x0, row = 0;
-        var t = thr.append("text").attr("x", xx + 5);
-        t.append("tspan").attr("class", "v").attr("x", xx + 5).text(eur(d.thr));
-        t.append("tspan").attr("x", xx + 5).attr("dy", 16).text("per entrare nel " + d.k);
-        var wid = t.node().getBBox().width;
-        while (placed.some(function (p) { return p.row === row && xx < p.x1 + 10 && xx + wid > p.x0 - 10; })) row++;
-        placed.push({ row: row, x0: xx, x1: xx + wid + 5 });
-        var ty = yT + 22 + row * 40;
-        t.attr("y", ty).selectAll("tspan").attr("y", ty);
-        t.select("tspan:nth-child(2)").attr("dy", 16);
-        thr.insert("line", "text").attr("x1", xx).attr("x2", xx).attr("y1", yBot - 4).attr("y2", ty + 20);
+      var yT = yBot + BH, bottom = yT, lineH = 15;
+      var list = D.filter(function (d) { return d.thr != null; });
+      var prevRight = -Infinity, rowY = 0;
+      list.forEach(function (d, k) {
+        var xx = sW[d.i].x0;
+        var next = k < list.length - 1 ? sW[list[k + 1].i].x0 : w;
+        var avail = Math.max(70, next - xx - 14);
+        var t = thr.append("text").attr("class", "halo");
+        var v = t.append("tspan").attr("class", "v").attr("x", xx + 5).text(eur(d.thr));
+        // parole della seconda parte, a capo entro lo spazio disponibile
+        var words = ("per entrare nel " + d.k).split(" "), lines = [], cur = "";
+        var meas = thr.append("text").style("font-size", "12px");
+        words.forEach(function (wd) {
+          var test = cur ? cur + " " + wd : wd;
+          meas.text(test);
+          if (meas.node().getComputedTextLength() > avail - 5 && cur) { lines.push(cur); cur = wd; } else cur = test;
+        });
+        lines.push(cur); meas.remove();
+        lines.forEach(function (ln) { t.append("tspan").attr("x", xx + 5).attr("dy", lineH).text(ln); });
+        // se nemmeno il valore ci sta prima della soglia successiva, scendo sotto l'etichetta precedente
+        var startY = yT + 22;
+        if (xx < prevRight) startY = rowY + 22;
+        t.attr("y", startY).select("tspan").attr("y", startY);
+        var b = t.node().getBBox();
+        prevRight = b.x + b.width + 10; rowY = b.y + b.height;
+        bottom = Math.max(bottom, b.y + b.height);
+        thr.insert("line", "text").attr("x1", xx).attr("x2", xx).attr("y1", yBot - 4).attr("y2", b.y + b.height);
       });
       R.enter(thr, phase, function (q) { q.style("opacity", 0); }, function (q) { q.style("opacity", 1); }, R.DUR);
-      var maxRow = placed.reduce(function (m, p) { return Math.max(m, p.row); }, 0);
-      var H = yT + 22 + maxRow * 40 + 26;
+      var H = bottom + 16;
       svg.attr("height", H);
 
       // interazione: un gruppo si evidenzia nelle due barre e nel collegamento
