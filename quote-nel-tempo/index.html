@@ -14,6 +14,13 @@
   .line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .line--main { stroke-width: 3; }
   .end-dot { stroke: var(--bg); stroke-width: 2; }
+  .r-pick { display: block; width: 100%; max-width: 320px; font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--rule); border-radius: 2px; padding: 7px 34px 7px 10px; margin: 0 0 12px; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%), linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
+  .r-pick:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .r-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 </style>
 </head>
 <body>
@@ -23,9 +30,14 @@
     <p class="r-sub">Quota della ricchezza netta delle famiglie posseduta da ciascun gruppo, in %. Le famiglie sono ordinate dalla più povera alla più ricca</p>
   </header>
 
-  <figure class="r-chart" id="p-top"><p class="r-chart__head">10% più ricco</p></figure>
-  <figure class="r-chart" id="p-mid"><p class="r-chart__head">40% centrale</p></figure>
-  <figure class="r-chart" id="p-low"><p class="r-chart__head">50% più povero</p></figure>
+  <figure class="r-chart" id="chart">
+    <label class="r-sr" for="grp">Gruppo di famiglie</label>
+    <select class="r-pick" id="grp">
+      <option>10% più ricco</option>
+      <option selected>40% centrale</option>
+      <option>50% più povero</option>
+    </select>
+  </figure>
 
   <footer class="r-foot">
     <span>Fonte: Bce, Distributional Wealth Accounts. Dati al 4° trimestre di ogni anno; 2026: 1° trimestre</span>
@@ -43,11 +55,10 @@
     Germania: { c: "var(--grey-3)" },
     Spagna:   { c: "var(--grey-4)" }
   };
-  var GROUPS = [
-    { id: "p-top", col: "10% più ricco" },
-    { id: "p-mid", col: "40% centrale" },
-    { id: "p-low", col: "50% più povero" }
-  ];
+  var grp = document.getElementById("grp");
+  // un solo grafico: il gruppo mostrato si sceglie dal menu
+  var GROUPS = [{ id: "chart", get col() { return grp.value; } }];
+  var drawFn;
   var f1 = function (v) { return fmt(v, 1) + "%"; };
   var pt = function (v) { return (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v), 1); };
 
@@ -83,10 +94,10 @@
       var cross;
       R.dismissOutside(host, function () { tip.hide(); if (cross) cross.style("opacity", 0); });
 
-      R.responsive(host, function (W, phase) {
+      R.responsive(host, drawFn = function (W, phase) {
         var narrow = R.isNarrow(W);
         var m = { top: 14, right: narrow ? 104 : 196, bottom: 26, left: 34 };
-        var H = narrow ? 200 : 220;
+        var H = narrow ? 280 : 340;
         var w = W - m.left - m.right, h = H - m.top - m.bottom;
         var vals = [].concat.apply([], COUNTRIES.map(function (c) { return data[c].map(function (p) { return p.v[G.col]; }); }));
         var lo = d3.min(vals), hi = d3.max(vals), pad = (hi - lo) * 0.12 || 1;
@@ -163,6 +174,12 @@
           })
           .on("pointerleave", function (ev) { if (ev.pointerType === "mouse") { tip.hide(); cross.style("opacity", 0); } });
       });
+    });
+    grp.addEventListener("change", function () {
+      var host = document.getElementById("chart");
+      d3.select(host).select(".r-tip").classed("is-on", false);
+      drawFn(Math.floor(host.getBoundingClientRect().width), "play");
+      R.scheduleHeight();
     });
   }).catch(function (err) { R.fail(document.querySelector(".radar"), err); });
 })();

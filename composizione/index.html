@@ -113,7 +113,7 @@
       }
       R.enter(paths, phase,
         function (p) { p.attr("d", function (s) { return pathAt(s, 0); }); },
-        function (p) { p.attrTween("d", function (s) { return function (t) { return pathAt(s, t); }; }); });
+        function (p) { if (p.attrTween) p.attrTween("d", function (s) { return function (t) { return pathAt(s, t); }; }); else p.attr("d", function (s) { return pathAt(s, 1); }); });
 
       // etichette dentro i segmenti quando ci stanno, altrimenti sotto con una linea di richiamo
       var inside = gb.append("g").attr("pointer-events", "none");
