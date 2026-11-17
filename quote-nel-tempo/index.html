@@ -85,7 +85,7 @@
 
       R.responsive(host, function (W, phase) {
         var narrow = R.isNarrow(W);
-        var m = { top: 14, right: narrow ? 84 : 196, bottom: 26, left: 34 };
+        var m = { top: 14, right: narrow ? 104 : 196, bottom: 26, left: 34 };
         var H = narrow ? 200 : 220;
         var w = W - m.left - m.right, h = H - m.top - m.bottom;
         var vals = [].concat.apply([], COUNTRIES.map(function (c) { return data[c].map(function (p) { return p.v[G.col]; }); }));
