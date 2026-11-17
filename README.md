@@ -6,6 +6,7 @@ Pagine pubblicate su GitHub Pages: https://cosimofire.github.io/ricchezza-famigl
 |---|---|---|---|
 | Di cosa è fatta la ricchezza delle famiglie italiane | https://cosimofire.github.io/ricchezza-famiglie/composizione/ | `data/composizione-ricchezza.csv` | Banca d'Italia, Conti distributivi della ricchezza, 1° trimestre 2026 |
 | Quote di ricchezza nel tempo: Italia, Francia, Germania e Spagna | https://cosimofire.github.io/ricchezza-famiglie/quote-nel-tempo/ | `data/quote-ricchezza.csv` | Bce, Distributional Wealth Accounts |
+| Cento anni di patrimoniali in Italia | https://cosimofire.github.io/ricchezza-famiglie/patrimoniali/ | `data/patrimoniali.csv` | Ricostruzione Radar – QN |
 
 ## Note sui dati
 

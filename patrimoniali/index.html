@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cento anni di patrimoniali in Italia – Radar QN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,700&display=swap">
+<link rel="stylesheet" href="../assets/radar.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="../assets/radar.js"></script>
+<style>
+  .tl-key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 18px 0 6px; }
+  .tl-key span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--blue); background: var(--blue); flex: none; }
+  .dot--open { background: var(--bg); }
+
+  .tl { position: relative; margin: 22px 0 8px; padding: 0; list-style: none; }
+  /* binario verticale: grigio di fondo + parte blu che si riempie scorrendo */
+  .tl::before, .tl__fill { content: ""; position: absolute; left: 110px; top: 8px; width: 2px; background: var(--rule); bottom: 8px; }
+  .tl__fill { background: var(--blue); bottom: auto; height: 0; transition: height 500ms ease-out; }
+
+  .tl-item { display: grid; grid-template-columns: 96px 32px 1fr; align-items: start; padding: 0 0 26px; position: relative;
+    opacity: 0; transform: translateY(14px); transition: opacity 600ms ease-out, transform 600ms ease-out; }
+  .tl-item.is-in { opacity: 1; transform: none; }
+  .tl-year { font-family: var(--serif); font-weight: 700; font-size: 26px; line-height: 1; text-align: right; color: var(--title); padding-top: 1px; font-variant-numeric: lining-nums; }
+  .tl-year small { display: block; font-size: 15px; font-weight: 700; color: var(--ink-2); margin-top: 3px; }
+  .tl-rail { position: relative; height: 100%; }
+  .tl-rail .dot { position: absolute; left: 9px; top: 6px; }
+  .tl-body { padding-top: 1px; }
+  .tl-tag { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 4px; }
+  .tl-text { font-size: 16px; line-height: 1.45; margin: 0; color: var(--ink); max-width: 560px; }
+
+  .tl-gap { display: grid; grid-template-columns: 96px 32px 1fr; padding: 0 0 26px; opacity: 0; transition: opacity 600ms ease-out; }
+  .tl-gap.is-in { opacity: 1; }
+  .tl-gap p { grid-column: 3; margin: 0; font-size: 13px; color: var(--ink-2); font-style: italic; }
+  .tl-gap .tl-rail::after { content: ""; position: absolute; left: 14px; top: -10px; height: 34px; border-left: 2px dashed var(--bg); }
+
+  @media (max-width: 519px) {
+    .tl::before, .tl__fill { left: 7px; }
+    .tl-item, .tl-gap { grid-template-columns: 26px 1fr; }
+    .tl-item .tl-rail, .tl-gap .tl-rail { grid-column: 1; grid-row: 1 / span 2; }
+    .tl-rail .dot { left: 1px; top: 4px; }
+    .tl-year { grid-column: 2; grid-row: 1; text-align: left; font-size: 24px; margin-bottom: 6px; }
+    .tl-year small { display: inline; font-size: 24px; color: var(--title); margin: 0; }
+    .tl-body { grid-column: 2; grid-row: 2; }
+    .tl-gap p { grid-column: 2; }
+    .tl-gap .tl-rail::after { left: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tl-item, .tl-gap { opacity: 1; transform: none; transition: none; }
+    .tl__fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main class="radar">
+  <header>
+    <h1 class="r-title">Cento anni di patrimoniali in Italia</h1>
+    <p class="r-sub">Le tasse sul patrimonio introdotte dai governi e le promesse, le polemiche e le proposte che le hanno accompagnate, dal 1920 a oggi</p>
+  </header>
+
+  <div class="tl-key" aria-hidden="true">
+    <span><i class="dot"></i>Misura approvata</span>
+    <span><i class="dot dot--open"></i>Promessa, polemica o proposta</span>
+  </div>
+
+  <ol class="tl" id="tl" aria-label="Cronologia delle tasse patrimoniali in Italia dal 1920 al 2025"><div class="tl__fill" id="fill"></div></ol>
+
+  <footer class="r-foot">
+    <span>Fonte: ricostruzione Radar – QN</span>
+    <span>Elaborazione Radar – QN</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var R = Radar;
+  var list = document.getElementById("tl"), fill = document.getElementById("fill");
+
+  function startYear(s) { return +String(s).slice(0, 4); }
+  function endYear(s) { var m = String(s).match(/(\d{4})\D*$/); return m ? +m[1] : startYear(s); }
+
+  R.loadCSV("../data/patrimoniali.csv").then(function (rows) {
+    var html = "";
+    rows.forEach(function (r, i) {
+      // pausa lunga tra due voci: la segnalo con una riga tratteggiata
+      if (i > 0) {
+        var gap = startYear(r["Anno"]) - endYear(rows[i - 1]["Anno"]);
+        if (gap >= 20) html += '<li class="tl-gap" aria-hidden="true"><span></span><div class="tl-rail"></div><p>' + gap + " anni dopo</p></li>";
+      }
+      var y = String(r["Anno"]), parts = y.split("-");
+      var yHtml = parts.length === 2 ? parts[0] + "<small>–" + parts[1] + "</small>" : y;
+      var open = r["Tipo"] !== "approvata";
+      html += '<li class="tl-item">' +
+        '<div class="tl-year">' + yHtml + "</div>" +
+        '<div class="tl-rail"><i class="dot' + (open ? " dot--open" : "") + '"></i></div>' +
+        '<div class="tl-body"><p class="tl-tag">' + (open ? "Promessa, polemica o proposta" : "Misura approvata") + "</p>" +
+        '<p class="tl-text">' + r["Testo"] + "</p></div></li>";
+    });
+    list.insertAdjacentHTML("beforeend", html);
+
+    var items = Array.prototype.slice.call(list.querySelectorAll(".tl-item, .tl-gap"));
+    function updateFill() {
+      // la linea blu arriva fino al pallino dell'ultima voce comparsa
+      var shown = items.filter(function (el) { return el.classList.contains("is-in") && el.classList.contains("tl-item"); });
+      if (!shown.length) { fill.style.height = "0px"; return; }
+      var last = shown[shown.length - 1], dot = last.querySelector(".dot");
+      var top = list.getBoundingClientRect().top;
+      fill.style.height = Math.max(0, dot.getBoundingClientRect().top - top + 6 - 8) + "px";
+    }
+    function show(el) { el.classList.add("is-in"); updateFill(); }
+
+    if (R.reduced || !("IntersectionObserver" in window)) items.forEach(show);
+    else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } });
+      }, { threshold: 0.35 });
+      items.forEach(function (el) { io.observe(el); });
+    }
+    window.addEventListener("resize", updateFill);
+    R.scheduleHeight();
+  }).catch(function (err) { R.fail(document.querySelector(".radar"), err); });
+})();
+</script>
+</body>
+</html>
